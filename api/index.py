@@ -20,19 +20,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 # Use __file__ for paths — works in any environment
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_DIR = '/tmp' if os.path.exists('/vercel') else BASE_DIR
+DB_DIR = '/tmp' if os.environ.get('VERCEL') else BASE_DIR
 
 from sqlalchemy.pool import StaticPool, NullPool
 
-if os.path.exists('/vercel'):
-    # Vercel serverless: in-memory DB with StaticPool
-    _db_path = 'sqlite://'
+if os.environ.get('VERCEL'):
+    DB_PATH = f'sqlite:////{os.path.join(DB_DIR, "quiz.db")}'
     _engine_opts = {
-        'poolclass': StaticPool,
-        'connect_args': {'check_same_thread': False},
+        'poolclass': NullPool,
     }
 else:
-    _db_path = f'sqlite:///{os.path.join(DB_DIR, "quiz.db")}'
+    DB_PATH = f'sqlite:///{os.path.join(DB_DIR, "quiz.db")}'
     _engine_opts = {}
 
 _template_kw = {'template_folder': os.path.join(BASE_DIR, 'templates')}
@@ -40,7 +38,8 @@ _static_kw = {'static_folder': os.path.join(BASE_DIR, 'static')}
 
 app = Flask(__name__, **_template_kw, **_static_kw)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'quiz-system-secret-key-2024')
-app.config['SQLALCHEMY_DATABASE_URI'] = _db_path
+
+app.config['SQLALCHEMY_DATABASE_URI'] = DB_PATH
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _engine_opts
 
