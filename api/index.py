@@ -73,20 +73,33 @@ class UserProgress(db.Model):
     submitted_answers = db.Column(db.Text, default='[]')
 
 
-# ── Database Migration ──────────────────────────────────────────────────
+# ── Database Initialization ─────────────────────────────────────────────
 
-with app.app_context():
-    from sqlalchemy import text as sa_text
-    inspector = db.inspect(db.engine)
+def init_db():
+    """Initialize database tables and run migrations if needed."""
+    from sqlalchemy import inspect as sa_inspect, text as sa_text
+    inspector = sa_inspect(db.engine)
+    tables = inspector.get_table_names()
+
+    if 'question' not in tables:
+        # Fresh database — create all tables, no migration needed
+        db.create_all()
+        return
+
+    # Existing database — run column migrations before create_all
     existing_cols = [c['name'] for c in inspector.get_columns('question')]
     if 'order_index' not in existing_cols:
         with db.engine.begin() as conn:
             conn.execute(sa_text('ALTER TABLE question ADD COLUMN order_index INTEGER'))
-    existing_cols = [c['name'] for c in inspector.get_columns('user_progress')]
-    if 'submitted_answers' not in existing_cols:
-        with db.engine.begin() as conn:
-            conn.execute(sa_text("ALTER TABLE user_progress ADD COLUMN submitted_answers TEXT DEFAULT '[]'"))
+    if 'user_progress' in tables:
+        existing_cols = [c['name'] for c in inspector.get_columns('user_progress')]
+        if 'submitted_answers' not in existing_cols:
+            with db.engine.begin() as conn:
+                conn.execute(sa_text("ALTER TABLE user_progress ADD COLUMN submitted_answers TEXT DEFAULT '[]'"))
     db.create_all()
+
+
+init_db()
 
 
 # ── Auth Decorator ──────────────────────────────────────────────────────
@@ -610,3 +623,9 @@ def index():
 @app.route('/quiz')
 def quiz_page():
     return render_template('index.html')
+
+
+# ── Run (local testing) ─────────────────────────────────────────────────
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
