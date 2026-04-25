@@ -22,7 +22,18 @@ from werkzeug.security import generate_password_hash, check_password_hash
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_DIR = '/tmp' if os.path.exists('/vercel') else BASE_DIR
 
-_db_path = f'sqlite:///{os.path.join(DB_DIR, "quiz.db")}'
+from sqlalchemy.pool import StaticPool, NullPool
+
+if os.path.exists('/vercel'):
+    # Vercel serverless: in-memory DB with StaticPool
+    _db_path = 'sqlite://'
+    _engine_opts = {
+        'poolclass': StaticPool,
+        'connect_args': {'check_same_thread': False},
+    }
+else:
+    _db_path = f'sqlite:///{os.path.join(DB_DIR, "quiz.db")}'
+    _engine_opts = {}
 
 _template_kw = {'template_folder': os.path.join(BASE_DIR, 'templates')}
 _static_kw = {'static_folder': os.path.join(BASE_DIR, 'static')}
@@ -31,27 +42,9 @@ app = Flask(__name__, **_template_kw, **_static_kw)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'quiz-system-secret-key-2024')
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'connect_args': {'check_same_thread': False},
-}
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = _engine_opts
 
 db = SQLAlchemy(app)
-
-
-def _sqlite_creator():
-    """Create SQLite connection with pragmas set for serverless."""
-    import sqlite3
-    conn = sqlite3.connect(os.path.join(DB_DIR, 'quiz.db'))
-    conn.execute('PRAGMA journal_mode=DELETE')
-    conn.execute('PRAGMA synchronous=NORMAL')
-    return conn
-
-
-if DB_DIR == '/tmp':
-    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-        'creator': _sqlite_creator,
-        'pool_pre_ping': True,
-    }
 
 
 # ── Models ──────────────────────────────────────────────────────────────
