@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>在线答题系统</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+        .app { max-width: 800px; margin: 0 auto; padding: 20px; }
+
+        /* Header */
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 2px solid #1976d2; margin-bottom: 20px; }
+        .header h1 { font-size: 22px; color: #1976d2; }
+        .user-info { display: flex; align-items: center; gap: 10px; }
+        .user-info span { font-size: 14px; color: #666; }
+
+        /* Navigation */
+        .nav { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+
+        /* Forms */
+        .auth-container { max-width: 400px; margin: 60px auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+        .auth-container h2 { text-align: center; margin-bottom: 24px; color: #1976d2; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; }
+        .form-group input, .form-group textarea {
+            width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; outline: none; transition: border-color 0.2s;
+        }
+        .form-group input:focus, .form-group textarea:focus { border-color: #1976d2; }
+        .form-group textarea { min-height: 200px; resize: vertical; font-family: monospace; }
+        .error-msg { color: #f44336; font-size: 13px; margin-bottom: 10px; }
+
+        /* Buttons */
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary { background: #1976d2; color: white; }
+        .btn-primary:hover { background: #1565c0; }
+        .btn-success { background: #4caf50; color: white; }
+        .btn-success:hover { background: #388e3c; }
+        .btn-warning { background: #ff9800; color: white; }
+        .btn-warning:hover { background: #f57c00; }
+        .btn-danger { background: #f44336; color: white; }
+        .btn-danger:hover { background: #d32f2f; }
+        .btn-outline { background: white; color: #1976d2; border: 1px solid #1976d2; }
+        .btn-outline:hover { background: #e3f2fd; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-block { display: block; width: 100%; }
+        .btn-lg { padding: 12px 24px; font-size: 16px; }
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        /* Cards */
+        .card { background: white; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .card h3 { margin-bottom: 12px; font-size: 16px; }
+
+        /* Stats */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .stat-card { background: white; border-radius: 8px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .stat-card .stat-value { font-size: 28px; font-weight: bold; color: #1976d2; }
+        .stat-card .stat-label { font-size: 13px; color: #999; margin-top: 4px; }
+
+        /* Progress */
+        .progress-bar { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #4caf50, #66bb6a); transition: width 0.3s ease; border-radius: 4px; }
+        .progress-text { font-size: 13px; color: #666; }
+
+        /* Quiz */
+        .question-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .question-badge { display: inline-block; background: #e3f2fd; color: #1976d2; padding: 4px 10px; border-radius: 4px; font-size: 13px; }
+        .question-text { font-size: 16px; line-height: 1.6; margin-bottom: 20px; white-space: pre-wrap; }
+        .options { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        .option-btn {
+            padding: 14px 16px; border: 2px solid #e0e0e0; border-radius: 8px;
+            text-align: left; cursor: pointer; font-size: 15px; transition: all 0.2s; background: white;
+            display: flex; gap: 10px; align-items: flex-start;
+        }
+        .option-btn:hover:not(:disabled) { border-color: #1976d2; background: #f5f9ff; }
+        .option-btn.selected { border-color: #1976d2; background: #e3f2fd; }
+        .option-btn.correct { border-color: #4caf50; background: #e8f5e9; }
+        .option-btn.wrong { border-color: #f44336; background: #ffebee; }
+        .option-btn:disabled { cursor: default; }
+        .option-label { font-weight: bold; min-width: 24px; }
+
+        /* Result */
+        .result-badge { display: inline-block; padding: 6px 16px; border-radius: 20px; font-weight: bold; font-size: 14px; margin-bottom: 12px; }
+        .result-badge.correct { background: #4caf50; color: white; }
+        .result-badge.wrong { background: #f44336; color: white; }
+        .explanation-box { background: #fff8e1; border-left: 4px solid #ff9800; padding: 14px 16px; border-radius: 0 8px 8px 0; margin: 16px 0; font-size: 14px; line-height: 1.6; }
+        .answer-info { font-size: 14px; color: #666; margin-bottom: 10px; }
+        .answer-info strong { color: #4caf50; }
+
+        /* Wrong Book */
+        .wrong-card { border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+        .wrong-card .wrong-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .wrong-count { background: #ffebee; color: #f44336; padding: 2px 8px; border-radius: 12px; font-size: 12px; }
+        .wrong-card .question-text { font-size: 15px; margin-bottom: 10px; }
+        .wrong-options { font-size: 13px; color: #666; margin-bottom: 8px; }
+        .wrong-options .correct-answer { color: #4caf50; font-weight: bold; }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        .modal { background: white; border-radius: 16px; padding: 30px; max-width: 480px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .modal h2 { text-align: center; margin-bottom: 20px; color: #1976d2; }
+        .modal-stats { display: flex; justify-content: center; gap: 20px; margin: 20px 0; }
+        .modal-stat { text-align: center; padding: 12px 24px; background: #f5f5f5; border-radius: 8px; }
+        .modal-stat .value { font-size: 24px; font-weight: bold; }
+        .modal-stat .value.correct { color: #4caf50; }
+        .modal-stat .value.wrong { color: #f44336; }
+        .modal-stat .label { font-size: 12px; color: #999; }
+        .modal .btn-group { justify-content: center; margin-top: 20px; }
+
+        /* Import */
+        .import-area { margin-bottom: 20px; }
+        .import-result { padding: 12px; border-radius: 8px; margin-top: 12px; font-size: 14px; }
+        .import-result.success { background: #e8f5e9; color: #2e7d32; }
+        .import-result.error { background: #ffebee; color: #c62828; }
+
+        /* Question List */
+        .question-item { border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+        .question-item-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+        .question-item-text { font-size: 15px; flex: 1; margin-right: 12px; }
+        .question-item-options { padding: 10px 0 4px 16px; font-size: 14px; color: #555; }
+        .question-item-options div { margin-bottom: 4px; }
+        .question-item-actions { display: flex; gap: 6px; }
+        .expand-icon { transition: transform 0.2s; display: inline-block; margin-right: 8px; color: #999; }
+        .expand-icon.expanded { transform: rotate(90deg); }
+        .correct-opt { color: #4caf50; font-weight: bold; }
+
+        /* Misc */
+        .empty-state { text-align: center; padding: 40px; color: #999; }
+        .link { color: #1976d2; cursor: pointer; text-decoration: underline; font-size: 14px; }
+        .link:hover { color: #1565c0; }
+        .text-center { text-align: center; }
+        .mt-16 { margin-top: 16px; }
+        .mb-16 { margin-bottom: 16px; }
+        .section-title { font-size: 18px; font-weight: 600; margin-bottom: 16px; color: #333; }
+        .divider { height: 1px; background: #e0e0e0; margin: 16px 0; }
+    </style>
+</head>
+<body>
+    <div id="app">
+    {% raw %}
+        <!-- Login View -->
+        <div v-if="currentView === 'login'" class="auth-container">
+            <h2>登录</h2>
+            <div v-if="loginError" class="error-msg">{{ loginError }}</div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input v-model="loginForm.username" placeholder="请输入用户名" @keyup.enter="doLogin">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input v-model="loginForm.password" type="password" placeholder="请输入密码" @keyup.enter="doLogin">
+            </div>
+            <button class="btn btn-primary btn-block btn-lg" @click="doLogin">登录</button>
+            <p class="text-center mt-16">
+                没有账号？<span class="link" @click="currentView = 'register'">立即注册</span>
+            </p>
+        </div>
+
+        <!-- Register View -->
+        <div v-if="currentView === 'register'" class="auth-container">
+            <h2>注册</h2>
+            <div v-if="registerError" class="error-msg">{{ registerError }}</div>
+            <div v-if="registerSuccess" class="import-result success" style="margin-bottom: 16px;">{{ registerSuccess }}</div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input v-model="registerForm.username" placeholder="请输入用户名">
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input v-model="registerForm.password" type="password" placeholder="请输入密码">
+            </div>
+            <div class="form-group">
+                <label>确认密码</label>
+                <input v-model="registerForm.confirm" type="password" placeholder="请再次输入密码">
+            </div>
+            <button class="btn btn-primary btn-block btn-lg" @click="doRegister">注册</button>
+            <p class="text-center mt-16">
+                已有账号？<span class="link" @click="currentView = 'login'">返回登录</span>
+            </p>
+        </div>
+
+        <!-- Main App (Authenticated) -->
+        <div v-if="currentUser">
+            <div class="header">
+                <h1>在线答题系统</h1>
+                <div class="user-info">
+                    <span>{{ currentUser.username }}</span>
+                    <button class="btn btn-outline" @click="doLogout">退出</button>
+                </div>
+            </div>
+
+            <div class="nav">
+                <button class="btn" :class="{ 'btn-primary': currentView === 'question_bank', 'btn-outline': currentView !== 'question_bank' }" @click="switchView('question_bank')">题库管理</button>
+                <button class="btn" :class="{ 'btn-primary': currentView === 'quiz', 'btn-outline': currentView !== 'quiz' }" @click="switchView('quiz')">开始答题</button>
+                <button class="btn" :class="{ 'btn-primary': currentView === 'wrong_book', 'btn-outline': currentView !== 'wrong_book' }" @click="switchView('wrong_book')">错题本</button>
+            </div>
+
+            <!-- Question Bank View -->
+            <div v-if="currentView === 'question_bank'">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ questionCount }}</div>
+                        <div class="stat-label">当前题库</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>文件导入</h3>
+                    <div class="form-group">
+                        <input type="file" ref="fileInputRef" accept=".md,.txt" @change="onFileSelected">
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-success" @click="importFromFile" :disabled="!selectedFile">选择文件并导入</button>
+                        <button class="btn btn-outline" @click="exportQuestions">导出题库</button>
+                        <button class="btn btn-outline" @click="downloadTemplate">下载模板</button>
+                    </div>
+                    <div v-if="importResult" class="import-result" :class="importResult.error ? 'error' : 'success'" style="margin-top: 12px;">
+                        {{ importResult.error || `导入成功！成功导入 ${importResult.imported} 道题` }}
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>粘贴导入</h3>
+                    <div class="form-group">
+                        <textarea v-model="importText" placeholder="在此粘贴题目内容...&#10;&#10;格式示例：&#10;第1题：题目内容&#10;A. 选项A&#10;B. 选项B&#10;C. 选项C&#10;D. 选项D&#10;答案：A&#10;解析：解析内容"></textarea>
+                    </div>
+                    <button class="btn btn-success" @click="importFromText" :disabled="!importText.trim()">粘贴导入</button>
+                </div>
+
+                <div class="card text-center">
+                    <h3>开始答题</h3>
+                    <p style="color: #666; margin-bottom: 16px;">题库当前共有 {{ questionCount }} 道题目</p>
+                    <button class="btn btn-primary btn-lg" @click="startQuiz" :disabled="questionCount === 0">开始答题</button>
+                </div>
+
+                <div class="card">
+                    <h3>题目列表</h3>
+                    <div style="margin-bottom: 12px;">
+                        <input type="text" v-model="questionSearch" placeholder="搜索题目内容..." style="width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                    </div>
+                    <div style="margin-bottom: 12px; display: flex; gap: 8px; align-items: center;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:14px; color:#666;">
+                            <input type="checkbox" :checked="selectAllChecked" :indeterminate.prop="selectAllIndeterminate" @change="toggleSelectAll" style="width:16px; height:16px;">
+                            全选
+                        </label>
+                        <button class="btn btn-danger" style="font-size:13px; padding:4px 12px;" @click="batchDeleteQuestions" :disabled="selectedQuestions.length === 0">
+                            批量删除 ({{ selectedQuestions.length }})
+                        </button>
+                        <span v-if="selectedQuestions.length > 0" style="font-size:13px; color:#f44336;">已选 {{ selectedQuestions.length }} 题</span>
+                    </div>
+                    <div v-if="filteredQuestions.length === 0 && questionCount > 0" style="text-align:center; color:#999; padding: 20px;">加载中...</div>
+                    <div v-else-if="questionCount === 0" style="text-align:center; color:#999; padding: 20px;">暂无题目</div>
+                    <div v-for="q in filteredQuestions" :key="q.id" class="question-item">
+                        <div class="question-item-header" @click="toggleQuestion(q.id)">
+                            <span class="expand-icon" :class="{ expanded: expandedQuestions[q.id] }">&#9654;</span>
+                            <input type="checkbox" v-model="selectedQuestions" :value="q.id" :id="'q-' + q.id" style="width:16px; height:16px; margin-right:8px; cursor:pointer; flex-shrink:0;" @click.stop>
+                            <label :for="'q-' + q.id" style="cursor:pointer; flex:1; display:flex; align-items:center;" @click.stop>
+                                <span class="question-item-text">
+                                    <span v-if="q.order_index != null">第{{ q.order_index }}题</span>
+                                    <span v-else>第{{ q.id }}题</span>：{{ q.question }}
+                                </span>
+                            </label>
+                            <div class="question-item-actions" @click.stop>
+                                <button class="btn btn-outline" style="font-size:12px; padding:4px 10px;" @click="openEdit(q)">编辑</button>
+                                <button class="btn btn-danger" style="font-size:12px; padding:4px 10px;" @click="deleteQuestion(q.id)">删除</button>
+                            </div>
+                        </div>
+                        <div v-if="expandedQuestions[q.id]" class="question-item-options">
+                            <div :class="{ 'correct-opt': q.answer === 'A' }">A. {{ q.option_a }}</div>
+                            <div :class="{ 'correct-opt': q.answer === 'B' }">B. {{ q.option_b }}</div>
+                            <div :class="{ 'correct-opt': q.answer === 'C' }">C. {{ q.option_c }}</div>
+                            <div :class="{ 'correct-opt': q.answer === 'D' }">D. {{ q.option_d }}</div>
+                            <div style="margin-top:8px; color:#4caf50; font-weight:bold;">答案：{{ q.answer }}</div>
+                            <div v-if="q.explanation" style="margin-top:4px; color:#ff9800;">解析：{{ q.explanation }}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 12px; text-align: center; color: #999; font-size: 13px;">
+                        共 {{ filteredQuestions.length }} / {{ questionCount }} 题
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quiz View -->
+            <div v-if="currentView === 'quiz'">
+                <!-- Quiz Not Started -->
+                <div v-if="!quizSession.session_id" class="card text-center">
+                    <h2>答题准备</h2>
+                    <p style="color: #666; margin: 16px 0;">题库共有 {{ questionCount }} 道题目，答题顺序将随机打乱。</p>
+                    <button class="btn btn-primary btn-lg" @click="startQuiz" :disabled="questionCount === 0">开始答题</button>
+                </div>
+
+                <!-- Quiz Complete -->
+                <div v-else-if="quizComplete" class="card">
+                    <h2 class="text-center">答题完成！</h2>
+                    <div class="stats-grid" style="margin-top: 20px;">
+                        <div class="stat-card">
+                            <div class="stat-value">{{ quizSession.total }}</div>
+                            <div class="stat-label">总题数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #4caf50;">{{ quizSession.correct_count }}</div>
+                            <div class="stat-label">正确数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="color: #f44336;">{{ quizSession.wrong_count }}</div>
+                            <div class="stat-label">错题数</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">{{ accuracyRate }}%</div>
+                            <div class="stat-label">正确率</div>
+                        </div>
+                    </div>
+                    <div class="text-center mt-16">
+                        <button class="btn btn-primary btn-lg" @click="startQuiz">再次答题</button>
+                        <button class="btn btn-outline btn-lg" style="margin-left: 10px;" @click="switchView('wrong_book')">查看错题本</button>
+                    </div>
+                </div>
+
+                <!-- Quiz In Progress -->
+                <div v-else-if="currentQuestion">
+                    <div class="progress-text">
+                        第 {{ quizSession.current_index + 1 }} 题 / 共 {{ quizSession.total }} 题
+                        &nbsp;&nbsp;|&nbsp;&nbsp;
+                        正确: {{ quizSession.correct_count }} &nbsp; 错误: {{ quizSession.wrong_count }}
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+                    </div>
+
+                    <div class="card">
+                        <div class="question-header">
+                            <span class="question-badge" v-if="currentQuestion.order_index != null">题库第 {{ currentQuestion.order_index }} 题</span>
+                            <span v-else class="question-badge">题库第 {{ currentQuestion.id }} 题</span>
+                        </div>
+                        <div class="question-text">{{ currentQuestion.question }}</div>
+
+                        <div class="options">
+                            <button v-for="opt in optionKeys" :key="opt.key"
+                                class="option-btn"
+                                :class="getOptionClass(opt.key)"
+                                :disabled="submitted"
+                                @click="selectOption(opt.key)">
+                                <span class="option-label">{{ opt.label }}.</span>
+                                <span>{{ opt.value }}</span>
+                            </button>
+                        </div>
+
+                        <button v-if="!submitted" class="btn btn-primary btn-lg btn-block"
+                            @click="submitAnswer" :disabled="!selectedAnswer">
+                            提交答案
+                        </button>
+
+                        <div v-if="submitted && submitResult" class="mt-16">
+                            <div class="result-badge" :class="submitResult.correct ? 'correct' : 'wrong'">
+                                {{ submitResult.correct ? '回答正确' : '回答错误' }}
+                            </div>
+                            <div v-if="!submitResult.correct" class="answer-info">
+                                正确答案：<strong>{{ submitResult.correct_answer }}</strong>
+                            </div>
+                            <div class="explanation-box">
+                                <strong>解析：</strong>{{ submitResult.explanation }}
+                            </div>
+                            <button class="btn btn-primary btn-lg btn-block mt-16" @click="nextQuestion">
+                                {{ isLastQuestion ? '查看结果' : '下一题' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Wrong Book View -->
+            <div v-if="currentView === 'wrong_book'">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <span class="section-title">错题本</span>
+                    <div class="btn-group">
+                        <button class="btn btn-danger" @click="clearWrongBook" v-if="wrongList.length > 0">清空错题本</button>
+                        <button class="btn btn-outline" @click="switchView('question_bank')">返回</button>
+                    </div>
+                </div>
+
+                <div v-if="wrongList.length === 0" class="card">
+                    <div class="empty-state">
+                        <p style="font-size: 48px; margin-bottom: 12px;">✓</p>
+                        <p>错题本为空，继续保持！</p>
+                    </div>
+                </div>
+
+                <div v-for="(item, index) in wrongList" :key="item.wrong_id" class="wrong-card">
+                    <div class="wrong-header">
+                        <span class="question-badge">第 {{ index + 1 }} 题
+                            <span v-if="item.order_index != null">（题库第 {{ item.order_index }} 题）</span>
+                        </span>
+                        <span class="wrong-count">错误 {{ item.times_wrong }} 次</span>
+                    </div>
+                    <div class="question-text">{{ item.question }}</div>
+                    <div class="wrong-options">
+                        <div v-for="opt in optionKeys.filter(o => o.key.toLowerCase() in item)">
+                            {{ opt.label }}. {{ item[opt.key.toLowerCase()] }}
+                            <span v-if="opt.key === item.answer" class="correct-answer"> ✓</span>
+                        </div>
+                    </div>
+                    <div style="font-size: 13px; color: #666; margin-top: 8px;">
+                        <span>正确答案：<strong style="color: #4caf50;">{{ item.answer }} - {{ getOptionText(item, item.answer) }}</strong></span>
+                        &nbsp;&nbsp;|&nbsp;&nbsp;
+                        <span>最后错误：{{ formatTime(item.last_wrong_time) }}</span>
+                    </div>
+                    <div class="explanation-box" style="margin-top: 10px; font-size: 13px;">
+                        <strong>解析：</strong>{{ item.explanation }}
+                    </div>
+                    <div style="margin-top: 10px; text-align: right;">
+                        <button class="btn btn-outline" @click="removeFromWrong(item.question_id)">移出错题本</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 10-Question Summary Modal -->
+        <div v-if="showSummary" class="modal-overlay" @click.self="closeSummary">
+            <div class="modal">
+                <h2>10题总结</h2>
+                <div class="modal-stats">
+                    <div class="modal-stat">
+                        <div class="value correct">{{ summaryStats.last_10_correct }}</div>
+                        <div class="label">正确</div>
+                    </div>
+                    <div class="modal-stat">
+                        <div class="value wrong">{{ summaryStats.last_10_wrong }}</div>
+                        <div class="label">错误</div>
+                    </div>
+                </div>
+                <p class="text-center" style="color: #666;">
+                    最近10题正确 {{ summaryStats.last_10_correct || 0 }} 题，错误 {{ summaryStats.last_10_wrong || 0 }} 题
+                </p>
+                <div class="btn-group">
+                    <button class="btn btn-primary btn-lg" @click="continueQuiz">继续答题</button>
+                    <button class="btn btn-warning btn-lg" @click="endQuiz">结束答题</button>
+                </div>
+            </div>
+        </div>
+
+            <!-- Edit Question Modal -->
+            <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
+                <div class="modal" style="max-width: 600px;">
+                    <h2>编辑题目</h2>
+                    <div class="form-group">
+                        <label>题库序号（可留空）</label>
+                        <input type="number" v-model.number="editForm.order_index" placeholder="留空则自动编号">
+                    </div>
+                    <div class="form-group">
+                        <label>题目内容</label>
+                        <textarea v-model="editForm.question" rows="3" style="min-height: 80px;"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>A 选项</label>
+                        <input v-model="editForm.option_a">
+                    </div>
+                    <div class="form-group">
+                        <label>B 选项</label>
+                        <input v-model="editForm.option_b">
+                    </div>
+                    <div class="form-group">
+                        <label>C 选项</label>
+                        <input v-model="editForm.option_c">
+                    </div>
+                    <div class="form-group">
+                        <label>D 选项</label>
+                        <input v-model="editForm.option_d">
+                    </div>
+                    <div class="form-group">
+                        <label>正确答案</label>
+                        <select v-model="editForm.answer" style="width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:6px; font-size:14px;">
+                            <option value="A">A</option>
+                            <option value="B">B</option>
+                            <option value="C">C</option>
+                            <option value="D">D</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>解析</label>
+                        <textarea v-model="editForm.explanation" rows="2" style="min-height: 60px;"></textarea>
+                    </div>
+                    <div class="btn-group" style="justify-content: flex-end;">
+                        <button class="btn btn-outline" @click="closeEditModal">取消</button>
+                        <button class="btn btn-primary" @click="saveEdit" :disabled="!editForm.question || !editForm.answer">保存</button>
+                    </div>
+                </div>
+    {% endraw %}
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
+
+        axios.defaults.withCredentials = true;
+
+        axios.interceptors.response.use(
+            response => response,
+            error => {
+                if (error.response?.status === 401) {
+                    localStorage.removeItem('quiz_user');
+                    window.location.reload();
+                }
+                return Promise.reject(error);
+            }
+        );
+
+        const app = createApp({
+            setup() {
+                // ── State ──
+                const currentView = ref('login');
+                const currentUser = ref(null);
+
+                // Auth
+                const loginForm = reactive({ username: '', password: '' });
+                const registerForm = reactive({ username: '', password: '', confirm: '' });
+                const loginError = ref('');
+                const registerError = ref('');
+                const registerSuccess = ref('');
+
+                // Question bank
+                const questionCount = ref(0);
+                const importText = ref('');
+                const importResult = ref(null);
+                const selectedFile = ref(null);
+                const fileInputRef = ref(null);
+
+                // Quiz
+                const quizSession = reactive({
+                    session_id: '', total: 0, current_index: 0,
+                    correct_count: 0, wrong_count: 0,
+                });
+                const currentQuestion = ref(null);
+                const selectedAnswer = ref('');
+                const submitted = ref(false);
+                const submitResult = ref(null);
+                const quizComplete = ref(false);
+                const showSummary = ref(false);
+                const summaryStats = ref({});
+
+                // Wrong book
+                const wrongList = ref([]);
+
+                // Question list management
+                const allQuestions = ref([]);
+                const questionSearch = ref('');
+                const expandedQuestions = ref({});
+                const selectedQuestions = ref([]);
+                const showEditModal = ref(false);
+                const editForm = reactive({
+                    id: null,
+                    order_index: null,
+                    question: '',
+                    option_a: '',
+                    option_b: '',
+                    option_c: '',
+                    option_d: '',
+                    answer: 'A',
+                    explanation: '',
+                });
+
+                const optionKeys = [
+                    { key: 'A', label: 'A', value: computed(() => currentQuestion.value?.option_a) },
+                    { key: 'B', label: 'B', value: computed(() => currentQuestion.value?.option_b) },
+                    { key: 'C', label: 'C', value: computed(() => currentQuestion.value?.option_c) },
+                    { key: 'D', label: 'D', value: computed(() => currentQuestion.value?.option_d) },
+                ];
+
+                // ── Computed ──
+                const progressPercent = computed(() => {
+                    if (quizSession.total === 0) return 0;
+                    return Math.round((quizSession.current_index / quizSession.total) * 100);
+                });
+
+                const isLastQuestion = computed(() => {
+                    return quizSession.current_index >= quizSession.total - 1;
+                });
+
+                const accuracyRate = computed(() => {
+                    const total = quizSession.correct_count + quizSession.wrong_count;
+                    if (total === 0) return '0.0';
+                    return ((quizSession.correct_count / total) * 100).toFixed(1);
+                });
+
+                const filteredQuestions = computed(() => {
+                    if (!questionSearch.value.trim()) return allQuestions.value;
+                    const s = questionSearch.value.trim().toLowerCase();
+                    return allQuestions.value.filter(q =>
+                        q.question.toLowerCase().includes(s) ||
+                        q.option_a.toLowerCase().includes(s) ||
+                        q.option_b.toLowerCase().includes(s) ||
+                        q.option_c.toLowerCase().includes(s) ||
+                        q.option_d.toLowerCase().includes(s)
+                    );
+                });
+
+                const selectAllChecked = computed(() => {
+                    return filteredQuestions.value.length > 0 && selectedQuestions.value.length === filteredQuestions.value.length;
+                });
+
+                const selectAllIndeterminate = computed(() => {
+                    const len = selectedQuestions.value.length;
+                    return len > 0 && len < filteredQuestions.value.length;
+                });
+
+                // ── API Helper ──
+                const api = async (method, url, data = null, config = {}) => {
+                    try {
+                        const res = await axios({ method, url, data, ...config });
+                        return res;
+                    } catch (e) {
+                        if (e.response?.status === 401) {
+                            logout();
+                        }
+                        throw e;
+                    }
+                };
+
+                // ── Auth ──
+                const doLogin = async () => {
+                    loginError.value = '';
+                    try {
+                        const res = await api('post', '/api/auth/login', loginForm);
+                        currentUser.value = res.data.user;
+                        localStorage.setItem('quiz_user', JSON.stringify(res.data.user));
+                        currentView.value = 'question_bank';
+                        loadQuestionCount();
+                        loginForm.username = '';
+                        loginForm.password = '';
+                    } catch (e) {
+                        loginError.value = e.response?.data?.error || '登录失败';
+                    }
+                };
+
+                const doRegister = async () => {
+                    registerError.value = '';
+                    registerSuccess.value = '';
+                    if (!registerForm.username || !registerForm.password) {
+                        registerError.value = '用户名和密码不能为空';
+                        return;
+                    }
+                    if (registerForm.password !== registerForm.confirm) {
+                        registerError.value = '两次密码不一致';
+                        return;
+                    }
+                    try {
+                        await api('post', '/api/auth/register', registerForm);
+                        registerSuccess.value = '注册成功，请登录';
+                        registerForm.username = '';
+                        registerForm.password = '';
+                        registerForm.confirm = '';
+                        setTimeout(() => { currentView.value = 'login'; }, 1500);
+                    } catch (e) {
+                        registerError.value = e.response?.data?.error || '注册失败';
+                    }
+                };
+
+                const doLogout = async () => {
+                    try { await api('post', '/api/auth/logout'); } catch (e) {}
+                    logout();
+                };
+
+                const logout = () => {
+                    currentUser.value = null;
+                    localStorage.removeItem('quiz_user');
+                    currentView.value = 'login';
+                };
+
+                // ── Question Bank ──
+                const loadQuestionCount = async () => {
+                    try {
+                        const res = await api('get', '/api/questions/count');
+                        questionCount.value = res.data.count;
+                    } catch (e) {}
+                };
+
+                const onFileSelected = (e) => {
+                    selectedFile.value = e.target.files[0];
+                };
+
+                const importFromFile = async () => {
+                    importResult.value = null;
+                    if (!selectedFile.value) return;
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', selectedFile.value);
+                        const res = await api('post', '/api/questions/import-file', formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+                        importResult.value = res.data;
+                        if (fileInputRef.value) fileInputRef.value.value = '';
+                        selectedFile.value = null;
+                        loadQuestionCount();
+                    } catch (e) {
+                        importResult.value = { error: e.response?.data?.error || '导入失败' };
+                    }
+                };
+
+                const importFromText = async () => {
+                    importResult.value = null;
+                    if (!importText.value.trim()) return;
+                    try {
+                        const res = await api('post', '/api/questions/import-text', { text: importText.value });
+                        importResult.value = res.data;
+                        importText.value = '';
+                        loadQuestionCount();
+                    } catch (e) {
+                        importResult.value = { error: e.response?.data?.error || '导入失败' };
+                    }
+                };
+
+                const exportQuestions = () => { window.open('/api/questions/export', '_blank'); };
+                const downloadTemplate = () => { window.open('/api/questions/template', '_blank'); };
+
+                // ── Quiz ──
+                const startQuiz = async () => {
+                    try {
+                        const res = await api('post', '/api/quiz/start');
+                        Object.assign(quizSession, res.data);
+                        currentView.value = 'quiz';
+                        quizComplete.value = false;
+                        selectedAnswer.value = '';
+                        submitted.value = false;
+                        submitResult.value = null;
+                        await loadQuestion();
+                    } catch (e) {
+                        alert(e.response?.data?.error || '启动答题失败');
+                    }
+                };
+
+                const loadQuestion = async () => {
+                    try {
+                        const res = await api('get', `/api/quiz/question?session_id=${quizSession.session_id}`);
+                        if (res.data.completed) {
+                            quizComplete.value = true;
+                            return;
+                        }
+                        currentQuestion.value = res.data.question;
+                        quizSession.current_index = res.data.current_index;
+                        quizSession.correct_count = res.data.correct_count;
+                        quizSession.wrong_count = res.data.wrong_count;
+                        submitted.value = false;
+                        selectedAnswer.value = '';
+                        submitResult.value = null;
+                    } catch (e) {}
+                };
+
+                const submitAnswer = async () => {
+                    if (!selectedAnswer.value) return;
+                    try {
+                        const res = await api('post', '/api/quiz/submit', {
+                            session_id: quizSession.session_id,
+                            answer: selectedAnswer.value
+                        });
+                        submitResult.value = {
+                            correct: res.data.correct,
+                            correct_answer: res.data.correct_answer,
+                            explanation: res.data.explanation,
+                        };
+                        submitted.value = true;
+                        quizSession.current_index = res.data.current_index;
+                        quizSession.correct_count = res.data.correct_count;
+                        quizSession.wrong_count = res.data.wrong_count;
+
+                        if (res.data.is_summary) {
+                            summaryStats.value = {
+                                last_10_correct: res.data.last_10_correct,
+                                last_10_wrong: res.data.last_10_wrong,
+                            };
+                            showSummary.value = true;
+                        }
+                    } catch (e) {}
+                };
+
+                const nextQuestion = () => {
+                    selectedAnswer.value = '';
+                    if (quizSession.current_index >= quizSession.total) {
+                        quizComplete.value = true;
+                    } else {
+                        loadQuestion();
+                    }
+                };
+
+                const continueQuiz = () => {
+                    showSummary.value = false;
+                    if (quizSession.current_index >= quizSession.total) {
+                        quizComplete.value = true;
+                    } else {
+                        selectedAnswer.value = '';
+                        loadQuestion();
+                    }
+                };
+
+                const endQuiz = () => {
+                    showSummary.value = false;
+                    quizComplete.value = true;
+                };
+
+                const selectOption = (key) => {
+                    if (submitted.value) return;
+                    selectedAnswer.value = key;
+                };
+
+                const getOptionClass = (key) => {
+                    if (!submitted.value || !submitResult.value) {
+                        return selectedAnswer.value === key ? 'selected' : '';
+                    }
+                    const correctKey = submitResult.value.correct_answer;
+                    if (key === correctKey) return 'correct';
+                    if (key === selectedAnswer.value && !submitResult.value.correct) return 'wrong';
+                    return '';
+                };
+
+                // ── Wrong Book ──
+                const loadWrongList = async () => {
+                    try {
+                        const res = await api('get', '/api/wrong/list');
+                        wrongList.value = res.data.wrong_answers;
+                    } catch (e) {}
+                };
+
+                const removeFromWrong = async (questionId) => {
+                    try {
+                        await api('post', '/api/wrong/remove', { question_id: questionId });
+                        loadWrongList();
+                    } catch (e) {}
+                };
+
+                const clearWrongBook = async () => {
+                    if (!confirm('确定要清空错题本吗？')) return;
+                    try {
+                        await api('post', '/api/wrong/clear');
+                        wrongList.value = [];
+                    } catch (e) {}
+                };
+
+                const formatTime = (isoStr) => {
+                    if (!isoStr) return '-';
+                    const d = new Date(isoStr);
+                    return d.toLocaleString('zh-CN');
+                };
+
+                const getOptionText = (item, answerKey) => {
+                    return item['option_' + answerKey.toLowerCase()] || '';
+                };
+
+                // ── Question Management ──
+                const loadAllQuestions = async () => {
+                    try {
+                        const res = await api('get', '/api/questions/list');
+                        allQuestions.value = res.data.questions;
+                    } catch (e) {}
+                };
+
+                const toggleQuestion = (id) => {
+                    expandedQuestions.value[id] = !expandedQuestions.value[id];
+                };
+
+                const openEdit = (q) => {
+                    showEditModal.value = true;
+                    editForm.id = q.id;
+                    editForm.order_index = q.order_index;
+                    editForm.question = q.question;
+                    editForm.option_a = q.option_a;
+                    editForm.option_b = q.option_b;
+                    editForm.option_c = q.option_c;
+                    editForm.option_d = q.option_d;
+                    editForm.answer = q.answer;
+                    editForm.explanation = q.explanation;
+                };
+
+                const closeEditModal = () => {
+                    showEditModal.value = false;
+                };
+
+                const saveEdit = async () => {
+                    if (!editForm.question || !editForm.answer) return;
+                    try {
+                        await api('put', '/api/questions/edit', {
+                            id: editForm.id,
+                            question: editForm.question,
+                            option_a: editForm.option_a,
+                            option_b: editForm.option_b,
+                            option_c: editForm.option_c,
+                            option_d: editForm.option_d,
+                            answer: editForm.answer,
+                            explanation: editForm.explanation,
+                            order_index: editForm.order_index,
+                        });
+                        loadAllQuestions();
+                        loadQuestionCount();
+                        closeEditModal();
+                    } catch (e) {}
+                };
+
+                const deleteQuestion = async (qid) => {
+                    if (!confirm('确定删除这道题？')) return;
+                    try {
+                        await api('delete', `/api/questions/delete/${qid}`);
+                        loadAllQuestions();
+                        loadQuestionCount();
+                    } catch (e) {}
+                };
+
+                const toggleSelectAll = () => {
+                    if (selectAllChecked.value) {
+                        selectedQuestions.value = [];
+                    } else {
+                        selectedQuestions.value = filteredQuestions.value.map(q => q.id);
+                    }
+                };
+
+                const batchDeleteQuestions = async () => {
+                    const count = selectedQuestions.value.length;
+                    if (!confirm(`确定删除选中的 ${count} 道题目？`)) return;
+                    try {
+                        await api('post', '/api/questions/batch-delete', { ids: [...selectedQuestions.value] });
+                        loadAllQuestions();
+                        loadQuestionCount();
+                        selectedQuestions.value = [];
+                    } catch (e) {}
+                };
+
+                // ── View Switch ──
+                const switchView = (view) => {
+                    currentView.value = view;
+                    if (view === 'question_bank') {
+                        loadQuestionCount();
+                        loadAllQuestions();
+                    }
+                    if (view === 'wrong_book') loadWrongList();
+                    if (view === 'quiz') {
+                        if (quizSession.session_id) {
+                            // Resume existing quiz
+                            quizComplete.value = false;
+                        }
+                    }
+                };
+
+                // ── Lifecycle ──
+                onMounted(async () => {
+                    const saved = localStorage.getItem('quiz_user');
+                    if (saved) {
+                        try {
+                            const user = JSON.parse(saved);
+                            const res = await api('get', '/api/auth/status');
+                            if (res.data.logged_in) {
+                                currentUser.value = user;
+                                currentView.value = 'question_bank';
+                                loadQuestionCount();
+                            } else {
+                                localStorage.removeItem('quiz_user');
+                            }
+                        } catch (e) {
+                            localStorage.removeItem('quiz_user');
+                        }
+                    }
+                });
+
+                return {
+                    currentView, currentUser,
+                    loginForm, registerForm, loginError, registerError, registerSuccess,
+                    questionCount, importText, importResult, selectedFile, fileInputRef,
+                    quizSession, currentQuestion, selectedAnswer, submitted, submitResult,
+                    quizComplete, showSummary, summaryStats, optionKeys,
+                    wrongList,
+                    allQuestions, questionSearch, expandedQuestions, selectedQuestions, showEditModal, editForm,
+                    filteredQuestions, selectAllChecked, selectAllIndeterminate,
+                    progressPercent, isLastQuestion, accuracyRate,
+                    doLogin, doRegister, doLogout,
+                    loadQuestionCount, onFileSelected, importFromFile, importFromText,
+                    exportQuestions, downloadTemplate,
+                    startQuiz, loadQuestion, submitAnswer, nextQuestion,
+                    selectOption, getOptionClass, continueQuiz, endQuiz,
+                    loadWrongList, removeFromWrong, clearWrongBook,
+                    switchView, formatTime, getOptionText,
+                    loadAllQuestions, toggleQuestion, openEdit, closeEditModal, saveEdit, deleteQuestion,
+                    toggleSelectAll, batchDeleteQuestions,
+                };
+            }
+        });
+
+        app.mount('#app');
+    </script>
+</body>
+</html>
