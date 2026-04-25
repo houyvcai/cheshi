@@ -13,11 +13,28 @@ from flask import (
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'quiz-system-secret-key-2024'
-app.config['SQLALCHEMY_DATABASE_URI'] = (
-    f'sqlite:///{os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance", "quiz.db")}'
-)
+# Detect Vercel serverless environment
+VERCEL = os.environ.get('VERCEL') or os.path.exists('/vercel')
+
+if VERCEL:
+    BASE_DIR = '/vercel/path0'
+    DB_DIR = '/tmp'
+    TEMPLATES_DIR = '/vercel/path0/templates'
+    STATIC_DIR = '/vercel/path0/static'
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DB_DIR = BASE_DIR
+    TEMPLATES_DIR = None  # use default
+    STATIC_DIR = None  # use default
+
+_db_path = f'sqlite:///{os.path.join(DB_DIR, "quiz.db")}'
+
+_template_kw = {'template_folder': TEMPLATES_DIR} if TEMPLATES_DIR else {}
+_static_kw = {'static_folder': STATIC_DIR} if STATIC_DIR else {}
+
+app = Flask(__name__, **_template_kw, **_static_kw)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'quiz-system-secret-key-2024')
+app.config['SQLALCHEMY_DATABASE_URI'] = _db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -356,7 +373,7 @@ def export_questions():
 @app.route('/api/questions/template')
 @login_required
 def download_template():
-    template_path = os.path.join(os.path.dirname(__file__), 'static', 'template.md')
+    template_path = os.path.join(BASE_DIR, 'static', 'template.md')
     return make_response(open(template_path, 'rb').read(), {
         'Content-Disposition': 'attachment; filename=question_template.md',
         'Content-Type': 'text/markdown; charset=utf-8',
