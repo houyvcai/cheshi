@@ -31,8 +31,27 @@ app = Flask(__name__, **_template_kw, **_static_kw)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'quiz-system-secret-key-2024')
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'connect_args': {'check_same_thread': False},
+}
 
 db = SQLAlchemy(app)
+
+
+def _sqlite_creator():
+    """Create SQLite connection with pragmas set for serverless."""
+    import sqlite3
+    conn = sqlite3.connect(os.path.join(DB_DIR, 'quiz.db'))
+    conn.execute('PRAGMA journal_mode=DELETE')
+    conn.execute('PRAGMA synchronous=NORMAL')
+    return conn
+
+
+if DB_DIR == '/tmp':
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'creator': _sqlite_creator,
+        'pool_pre_ping': True,
+    }
 
 
 # ── Models ──────────────────────────────────────────────────────────────
