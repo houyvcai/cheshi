@@ -75,6 +75,9 @@ class UserProgress(db.Model):
 
 # ── Database Initialization ─────────────────────────────────────────────
 
+_db_initialized = False
+
+
 def init_db():
     """Initialize database tables and run migrations if needed."""
     from sqlalchemy import inspect as sa_inspect, text as sa_text
@@ -82,11 +85,9 @@ def init_db():
     tables = inspector.get_table_names()
 
     if 'question' not in tables:
-        # Fresh database — create all tables, no migration needed
         db.create_all()
         return
 
-    # Existing database — run column migrations before create_all
     existing_cols = [c['name'] for c in inspector.get_columns('question')]
     if 'order_index' not in existing_cols:
         with db.engine.begin() as conn:
@@ -99,8 +100,12 @@ def init_db():
     db.create_all()
 
 
-with app.app_context():
-    init_db()
+@app.before_request
+def _ensure_db():
+    global _db_initialized
+    if not _db_initialized:
+        init_db()
+        _db_initialized = True
 
 
 # ── Auth Decorator ──────────────────────────────────────────────────────
