@@ -6,6 +6,11 @@ import random
 from datetime import datetime, timezone
 from functools import wraps
 
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 from flask import (
     Flask, render_template, request, jsonify, session,
     make_response
@@ -76,28 +81,36 @@ class UserProgress(db.Model):
 # ── Database Initialization ─────────────────────────────────────────────
 
 _db_initialized = False
+_db_error = None
 
 
 def init_db():
     """Initialize database tables and run migrations if needed."""
-    from sqlalchemy import inspect as sa_inspect, text as sa_text
-    inspector = sa_inspect(db.engine)
-    tables = inspector.get_table_names()
+    global _db_error
+    try:
+        from sqlalchemy import inspect as sa_inspect, text as sa_text
+        inspector = sa_inspect(db.engine)
+        tables = inspector.get_table_names()
 
-    if 'question' not in tables:
+        if 'question' not in tables:
+            db.create_all()
+            return
+
+        existing_cols = [c['name'] for c in inspector.get_columns('question')]
+        if 'order_index' not in existing_cols:
+            with db.engine.connect() as conn:
+                conn.execute(sa_text('ALTER TABLE question ADD COLUMN order_index INTEGER'))
+                conn.commit()
+        if 'user_progress' in tables:
+            existing_cols = [c['name'] for c in inspector.get_columns('user_progress')]
+            if 'submitted_answers' not in existing_cols:
+                with db.engine.connect() as conn:
+                    conn.execute(sa_text("ALTER TABLE user_progress ADD COLUMN submitted_answers TEXT DEFAULT '[]'"))
+                    conn.commit()
         db.create_all()
-        return
-
-    existing_cols = [c['name'] for c in inspector.get_columns('question')]
-    if 'order_index' not in existing_cols:
-        with db.engine.begin() as conn:
-            conn.execute(sa_text('ALTER TABLE question ADD COLUMN order_index INTEGER'))
-    if 'user_progress' in tables:
-        existing_cols = [c['name'] for c in inspector.get_columns('user_progress')]
-        if 'submitted_answers' not in existing_cols:
-            with db.engine.begin() as conn:
-                conn.execute(sa_text("ALTER TABLE user_progress ADD COLUMN submitted_answers TEXT DEFAULT '[]'"))
-    db.create_all()
+    except Exception as e:
+        logger.error(f"DB init failed: {e}", exc_info=True)
+        _db_error = str(e)
 
 
 @app.before_request
@@ -106,6 +119,8 @@ def _ensure_db():
     if not _db_initialized:
         init_db()
         _db_initialized = True
+    if _db_error:
+        return jsonify({'error': f'Database not ready: {_db_error}'}), 500
 
 
 # ── Auth Decorator ──────────────────────────────────────────────────────
@@ -635,3 +650,19 @@ def quiz_page():
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
+
+# ── Error Handler & Health Check ────────────────────────────────────────
+
+@app.route('/api/health')
+def health_check():
+    return jsonify({
+        'status': 'ok' if not _db_error else 'error',
+        'db_error': _db_error,
+    })
+
+
+@app.errorhandler(Exception)
+def handle_error(e):
+    logger.error(f"Unhandled error: {e}", exc_info=True)
+    return jsonify({'error': str(e)}), 500
