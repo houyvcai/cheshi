@@ -107,7 +107,8 @@ def init_db():
     db.create_all()
 
 
-init_db()
+with app.app_context():
+    init_db()
 
 
 # ── Auth Decorator ──────────────────────────────────────────────────────
